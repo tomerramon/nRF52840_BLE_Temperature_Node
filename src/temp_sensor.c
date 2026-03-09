@@ -67,6 +67,14 @@ int32_t TempSensorGetMax(void)
     return max_temp;
 }
 
+/**
+ * Applies a simple moving average filter to the incoming temperature samples to smooth out noise.
+ * Maintains a circular buffer of the last FILTER_WINDOW_SIZE samples and returns the average.
+ * This helps to provide more stable temperature readings at the cost of some responsiveness to rapid changes.
+ * filter_head always points to the NEXT write slot.
+ * While filling (filter_count < FILTER_WINDOW_SIZE), only indices [0, filter_count) are valid.
+ * Once full, all FILTER_WINDOW_SIZE slots are valid and the oldest entry is silently overwritten on each new sample.
+ */
 static int32_t ApplyMovingAverage(int32_t new_sample)
 {
     static int32_t filter_buffer[FILTER_WINDOW_SIZE];

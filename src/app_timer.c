@@ -20,6 +20,11 @@ void TimerInit(void)
 void TimerSetInterval(uint32_t interval_ms)
 {
     LOG_INF("Application timer interval set to %u ms", interval_ms);
+    if (interval_ms < MIN_INTERVAL_MS || interval_ms > MAX_INTERVAL_MS)
+    {
+        LOG_ERR("Rejected interval %u ms (allowed: %u-%u ms), Interval remain as is.", interval_ms, MIN_INTERVAL_MS, MAX_INTERVAL_MS);
+        return;
+    }
     timer_interval_ms = interval_ms;
     k_timer_start(&app_timer, K_MSEC(interval_ms), K_MSEC(interval_ms));
 }

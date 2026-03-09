@@ -18,12 +18,49 @@ LOG_MODULE_REGISTER(BLE_controller, LOG_LEVEL_DBG);
 /* Dynamic suffix format: '_' + 4 hex chars + null terminator = 6 extra bytes */
 #define DEVICE_NAME_SUFFIX_LEN 6
 #define DEVICE_NAME_BUF_LEN (DEVICE_NAME_LEN + DEVICE_NAME_SUFFIX_LEN)
-#define TEMP_CHRC_ATTR_IDX 2
 #define CON_STATUS_LED DK_LED2
 
 /*
- * Shared state accessed from both the BT stack thread and the main thread.
- * atomic_t guarantees safe concurrent reads/writes on without mutexes.
+ * Index of the Temperature characteristic *value* attribute within env_node_svc.attrs[].
+ * Layout: [0]=primary service, [1]=char declaration, [2]=char value, [3]=CCC,
+ *         [4]=interval char declaration, [5]=interval char value.
+ * If attributes are reordered this MUST be updated accordingly.
+ */
+#define TEMP_CHRC_ATTR_IDX 2
+
+/*
+ * Preferred BLE connection parameters requested from the central after connecting.
+ *
+ * Rationale:
+ *   - interval_min = 100 ms, interval_max = 500 ms (units of 1.25 ms → 80 / 400):
+ *       The device samples at 200 ms–10 s. A 100–500 ms connection interval means
+ *       notifications are delivered within at most one interval of their sample tick,
+ *       while still saving significant radio-on time vs the default 7.5 ms interval.
+ *   - latency = 0: The peripheral must stay responsive every event to receive
+ *       interval WRITE commands from the central without delay.
+ *   - timeout = 4000 ms (400 × 10 ms):
+ *       Must satisfy: timeout > interval_max × (latency + 1) × 2
+ *       → 4000 > 500 × 1 × 2 = 1000 ms  ✓
+ *       Gives enough headroom for a phone screen-off radio duty-cycle.
+ *
+ * Note: These are *preferred* parameters. The central (phone) is not obligated
+ * to accept them. The negotiated values are logged in on_le_param_updated().
+ */
+#define CONN_INTERVAL_MIN_UNITS BT_GAP_MS_TO_CONN_INTERVAL(100) /* 80  × 1.25 ms = 100 ms */
+#define CONN_INTERVAL_MAX_UNITS BT_GAP_MS_TO_CONN_INTERVAL(500) /* 400 × 1.25 ms = 500 ms */
+#define CONN_LATENCY 0
+#define CONN_TIMEOUT_UNITS 400 /* 400 × 10 ms = 4000 ms */
+
+static const struct bt_le_conn_param preferred_conn_params =
+    BT_LE_CONN_PARAM_INIT(CONN_INTERVAL_MIN_UNITS,
+                          CONN_INTERVAL_MAX_UNITS,
+                          CONN_LATENCY,
+                          CONN_TIMEOUT_UNITS);
+
+/*
+ * These flags are written from BT stack callbacks (BT thread context)
+ * and read from the main application thread. atomic_t provides lock-free,
+ * race-free access without needing a mutex.
  */
 static atomic_t is_connected = ATOMIC_INIT(0);
 static atomic_t is_notifications_enabled = ATOMIC_INIT(0);
@@ -41,7 +78,7 @@ static const struct bt_data ad[] = {
 };
 
 static struct bt_data sd[] = {
-    BT_DATA(BT_DATA_NAME_COMPLETE, device_name, DEVICE_NAME_LEN),
+    BT_DATA(BT_DATA_NAME_COMPLETE, device_name, DEVICE_NAME_BUF_LEN),
 };
 
 static void adv_work_handler(struct k_work *work)
@@ -79,6 +116,17 @@ static void on_connected(struct bt_conn *conn, uint8_t err)
     LOG_INF("Connected");
     atomic_set(&is_connected, 1);
     dk_set_led_on(CON_STATUS_LED);
+
+    /*
+     * Request preferred connection parameters from the central.
+     * This is advisory — the central (phone) may accept, modify, or reject.
+     * The outcome is logged in on_le_param_updated() below.
+     */
+    err = bt_conn_le_param_update(conn, &preferred_conn_params);
+    if (err)
+    {
+        LOG_WRN("Connection parameter update request failed (err %d)", err);
+    }
 }
 
 static void on_disconnected(struct bt_conn *conn, uint8_t reason)
@@ -89,10 +137,44 @@ static void on_disconnected(struct bt_conn *conn, uint8_t reason)
     dk_set_led_off(CON_STATUS_LED);
 }
 
+/*
+ * Called when the central proposes new connection parameters.
+ * Returning true accepts them unconditionally.
+ */
+static bool on_le_param_req(struct bt_conn *conn, struct bt_le_conn_param *param)
+{
+    if (param->interval_min < CONN_INTERVAL_MIN_UNITS || param->interval_max > CONN_INTERVAL_MAX_UNITS)
+    {
+        LOG_WRN("Central requests invalid conn params: interval [%u, %u] latency %u timeout %u",
+                param->interval_min, param->interval_max,
+                param->latency, param->timeout);
+        return false; /* reject */
+    }
+
+    LOG_DBG("Central requests conn params: interval [%u, %u] latency %u timeout %u",
+            param->interval_min, param->interval_max,
+            param->latency, param->timeout);
+    return true; /* accept */
+}
+
+/*
+ * Called after connection parameters have been successfully updated.
+ * Logs the actual negotiated values so you can verify in RTT/UART logs.
+ */
+static void on_le_param_updated(struct bt_conn *conn, uint16_t interval,
+                                uint16_t latency, uint16_t timeout)
+{
+    /* interval is in units of 1.25 ms */
+    LOG_INF("Conn params updated: interval %u (%.2f ms), latency %u, timeout %u ms",
+            interval, (double)interval * 1.25, latency, timeout * 10);
+}
+
 BT_CONN_CB_DEFINE(connection_callbacks) = {
     .connected = on_connected,
     .disconnected = on_disconnected,
     .recycled = recycled_cb,
+    .le_param_req = on_le_param_req,         /* central requests param change   */
+    .le_param_updated = on_le_param_updated, /* negotiation completed, log result */
 };
 
 static ssize_t ReadTemperature(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset)
@@ -193,14 +275,14 @@ int BLEInit(void)
     if (err)
     {
         LOG_ERR("LEDs init failed (err %d)", err);
-        return -err;
+        return err;
     }
 
     err = bt_enable(NULL);
     if (err)
     {
         LOG_ERR("Bluetooth init failed (err %d)", err);
-        return -err;
+        return err;
     }
 
     SetDynamicDeviceName();
@@ -227,8 +309,6 @@ int BLENotify(int32_t temperature)
 
     atomic_set(&current_temperature, temperature);
 
-    int32_t temp = (int32_t)atomic_get(&current_temperature);
-
     return bt_gatt_notify(NULL, &env_node_svc.attrs[TEMP_CHRC_ATTR_IDX],
-                          &temp, sizeof(temp));
+                          &temperature, sizeof(temperature));
 }

@@ -101,6 +101,8 @@ In VS Code, open the **Serial Terminal** panel (bottom bar) and connect at **115
 - Write a 4-byte little-endian `uint32_t` value in milliseconds.
 - Valid range: **200 ms – 10,000 ms**. Values outside this range are rejected with ATT error `Value Not Allowed`.
 - Example — set to 2 seconds: write `0xD0 0x07 0x00 0x00` (2000 = `0x000007D0`).
+- Out-of-range values are rejected with ATT error `0x13` (Value Not Allowed).
+- The board log confirms: `Application timer interval set to XXXX ms`.
 
 ### Disconnect
 - Tap **Disconnect**. LED2 turns OFF. The device automatically restarts advertising.
@@ -168,8 +170,11 @@ Zephyr is a multi-threaded RTOS. This firmware uses three threads — two create
 │  │  BT stack thread  (managed by Zephyr BLE stack)              │  │
 │  │                                                              │  │
 │  │   on_connected()    ──► atomic_set(is_connected)             │  │
+│  │                     ──► bt_conn_le_param_update()           │  │
 │  │   on_disconnected() ──► atomic_set(is_connected = 0)         │  │
-│  │                         k_work_submit(adv_work)              │  │
+│  │   recycled_cb()     ──► k_work_submit(adv_work)             │  │
+│  │                         (connection object freed; safe to   │  │
+│  │                          restart advertising only now)       │  │
 │  │   WriteInterval()   ──► TimerSetInterval()                   │  │
 │  │   ReadTemperature() ──► atomic_get(current_temperature)      │  │
 │  └──────────────────────────────────────────────────────────────┘  │
@@ -239,7 +244,7 @@ Configure it as follows to match this firmware:
 | Protocol | Bluetooth LE |
 | Role | Peripheral |
 | Advertising interval | 100 ms (FAST_1 preset) |
-| Connection interval | 7.5–15 ms (Zephyr default) |
+| Connection interval | 100–500 ms (peripheral preference set in `ble_service.c`) |
 | TX power | 0 dBm |
 | Notification interval | matches your sampling interval |
 | CPU sleep between events | enabled |
@@ -273,6 +278,9 @@ The WDT is configured with a timeout of `MAX_INTERVAL_MS × 2` = **20,000 ms**.
 ---
 
 ## Bonus Features
+
+### Connection Interval Preference
+After connecting, the peripheral requests a **100–500 ms** connection interval via `bt_conn_le_param_update()`. Rationale: the fastest sampling rate is 200 ms, so a ≤500 ms interval ensures notifications are delivered within one connection event of their sample tick, while saving significant radio-on time versus the 7.5 ms Zephyr default. Slave latency is set to 0 so the peripheral stays responsive to incoming interval WRITE commands. The actual negotiated values are logged by `on_le_param_updated()` — check your serial/RTT log to see what the phone accepted.
 
 ### Moving Average Filter
 A 10-sample circular buffer in `temp_sensor.c` smooths out ADC noise from the internal temperature sensor. The filter correctly handles the warm-up period — it divides by the actual number of samples collected, not the fixed window size.

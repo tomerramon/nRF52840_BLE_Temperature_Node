@@ -33,7 +33,7 @@ int main(void)
     }
 
     ret = wdt_setup(wdt, WDT_OPT_PAUSE_HALTED_BY_DBG);
-    if (ret)
+    if (0 > ret)
     {
         LOG_ERR("Failed to setup watchdog: %d", ret);
         return ret;
