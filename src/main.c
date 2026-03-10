@@ -66,10 +66,18 @@ int main(void)
         }
         else
         {
-            LOG_DBG("Current temperature: %d.%02d C", temperature / 100, temperature % 100);
-            LOG_DBG("Min: %d.%02d C, Max: %d.%02d C",
-                    TempSensorGetMin() / 100, TempSensorGetMin() % 100,
-                    TempSensorGetMax() / 100, TempSensorGetMax() % 100);
+            int32_t t = temperature;
+            int32_t abs_frac = (t < 0 ? -t : t) % 100;
+            LOG_DBG("Current temperature: %s%d.%02d C", t < 0 ? "-" : "", (t < 0 ? -t : t) / 100, abs_frac);
+
+            t = TempSensorGetMin();
+            abs_frac = (t < 0 ? -t : t) % 100;
+            LOG_DBG("Min temperature: %s%d.%02d C", t < 0 ? "-" : "", (t < 0 ? -t : t) / 100, abs_frac);
+
+            t = TempSensorGetMax();
+            abs_frac = (t < 0 ? -t : t) % 100;
+            LOG_DBG("Max temperature: %s%d.%02d C", t < 0 ? "-" : "", (t < 0 ? -t : t) / 100, abs_frac);
+
             ret = BLENotify(temperature);
             if (ret && ret != -EACCES)
             {

@@ -10,7 +10,7 @@
 #include "ble_service.h" // BLEInit, BLENotify
 #include "app_timer.h"   // TimerGetInterval
 
-LOG_MODULE_REGISTER(BLE_controller, LOG_LEVEL_DBG);
+LOG_MODULE_REGISTER(ble_controller, LOG_LEVEL_DBG);
 
 #define BASE_DEVICE_NAME CONFIG_BT_DEVICE_NAME
 #define DEVICE_NAME_LEN (sizeof(BASE_DEVICE_NAME) - 1)
