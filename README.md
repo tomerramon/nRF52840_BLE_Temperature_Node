@@ -125,6 +125,7 @@ Open the **Serial Terminal** panel in VS Code, connect at **115200 baud**. Alter
 ---
 
 ## Architecture Overview
+>The firmware is fully event-driven across three Zephyr threads: main (sensor + WDT), the BT stack thread (all BLE events), and the system work queue (advertising restart). All shared state is accessed via atomic_t.
 
 ### Threads
 
