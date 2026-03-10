@@ -11,7 +11,7 @@ A BLE peripheral firmware built with **nRF Connect SDK (Zephyr RTOS)** that peri
 
 - [Getting the Code](#getting-the-code)
 - [SDK & Toolchain](#sdk--toolchain)
-- [Project Structure](##project-structure)
+- [Project Structure](#project-structure)
 - [How to Build & Flash](#how-to-build--flash)
 - [How to Test](#how-to-test-with-nrf-connect-app)
 - [Architecture Overview](#architecture-overview)
@@ -34,7 +34,7 @@ A BLE peripheral firmware built with **nRF Connect SDK (Zephyr RTOS)** that peri
 
 ---
 
-## # Project Structure
+##  Project Structure
 
 ```
 ble_temp_node/
