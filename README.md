@@ -101,6 +101,8 @@ In VS Code, open the **Serial Terminal** panel (bottom bar) and connect at **115
 - Write a 4-byte little-endian `uint32_t` value in milliseconds.
 - Valid range: **200 ms – 10,000 ms**. Values outside this range are rejected with ATT error `Value Not Allowed`.
 - Example — set to 2 seconds: write `0xD0 0x07 0x00 0x00` (2000 = `0x000007D0`).
+- Out-of-range values are rejected with ATT error `0x13` (Value Not Allowed).
+- The board log confirms: `Application timer interval set to XXXX ms`.
 
 ### Disconnect
 - Tap **Disconnect**. LED2 turns OFF. The device automatically restarts advertising.
