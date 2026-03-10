@@ -132,59 +132,59 @@ Zephyr is a multi-threaded RTOS. This firmware uses three threads — two create
 ### UML — Component & Data Flow
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│  HARDWARE / PERIPHERALS                                             │
-│                                                                     │
+┌────────────────────────────────────────────────────────────────────┐
+│  HARDWARE / PERIPHERALS                                            │
+│                                                                    │
 │   ┌──────────┐    RTC1 interrupt     ┌────────────────────────┐    │
 │   │  RTC1    │──────────────────────►│  k_timer (app_timer.c) │    │
 │   └──────────┘                       └──────────┬─────────────┘    │
-│                                                  │ k_sem_give       │
+│                                                 │ k_sem_give       │
 │   ┌──────────┐    radio interrupt               │                  │
 │   │  RADIO   │──────────────────────►  BT stack thread             │
 │   └──────────┘                                  │                  │
 └─────────────────────────────────────────────────│──────────────────┘
                                                   │
 ┌─────────────────────────────────────────────────▼──────────────────┐
-│  APPLICATION THREADS                                                │
-│                                                                     │
+│  APPLICATION THREADS                                               │
+│                                                                    │
 │  ┌──────────────────────────────────────────────────────────────┐  │
 │  │  main thread                                                 │  │
 │  │                                                              │  │
 │  │  [boot]                                                      │  │
-│  │   WDT setup ──► TempSensorInit ──► TimerInit ──► BLEInit    │  │
+│  │   WDT setup ──► TempSensorInit ──► TimerInit ──► BLEInit     │  │
 │  │                                                              │  │
 │  │  [loop — CPU sleeps here until semaphore fires]              │  │
 │  │   k_sem_take(K_FOREVER)                                      │  │
 │  │         │                                                    │  │
 │  │         ▼                                                    │  │
-│  │   TempSensorRead()  ──► ApplyMovingAverage() ──► min/max    │  │
+│  │   TempSensorRead()  ──► ApplyMovingAverage() ──► min/max     │  │
 │  │         │                                                    │  │
 │  │         ▼                                                    │  │
-│  │   BLENotify(temp)   ──► bt_gatt_notify() ──► BT stack       │  │
+│  │   BLENotify(temp)   ──► bt_gatt_notify() ──► BT stack        │  │
 │  │         │                                                    │  │
 │  │         ▼                                                    │  │
 │  │   wdt_feed()                                                 │  │
 │  └──────────────────────────────────────────────────────────────┘  │
-│                                                                     │
+│                                                                    │
 │  ┌──────────────────────────────────────────────────────────────┐  │
 │  │  BT stack thread  (managed by Zephyr BLE stack)              │  │
 │  │                                                              │  │
 │  │   on_connected()    ──► atomic_set(is_connected)             │  │
-│  │                     ──► bt_conn_le_param_update()           │  │
+│  │                     ──► bt_conn_le_param_update()            │  │
 │  │   on_disconnected() ──► atomic_set(is_connected = 0)         │  │
-│  │   recycled_cb()     ──► k_work_submit(adv_work)             │  │
-│  │                         (connection object freed; safe to   │  │
+│  │   recycled_cb()     ──► k_work_submit(adv_work)              │  │
+│  │                         (connection object freed; safe to    │  │
 │  │                          restart advertising only now)       │  │
 │  │   WriteInterval()   ──► TimerSetInterval()                   │  │
 │  │   ReadTemperature() ──► atomic_get(current_temperature)      │  │
 │  └──────────────────────────────────────────────────────────────┘  │
-│                                                                     │
+│                                                                    │
 │  ┌──────────────────────────────────────────────────────────────┐  │
 │  │  System work queue thread                                    │  │
 │  │                                                              │  │
 │  │   adv_work_handler() ──► bt_le_adv_start()                   │  │
 │  └──────────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────────┘
+└────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Module Responsibilities
