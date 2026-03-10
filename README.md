@@ -23,6 +23,25 @@ A BLE peripheral firmware built with **nRF Connect SDK (Zephyr RTOS)** that peri
 
 ---
 
+## Getting the Code
+
+```bash
+git clone https://github.com//ble_temp_node.git
+cd ble_temp_node
+```
+
+The repository is a self-contained NCS application — no separate SDK repository to clone. The only external dependency is the nRF Connect SDK itself, installed once via the VS Code extension (see [How to Build & Flash](#how-to-build--flash) below).
+
+### First-Time Setup (one-time only)
+
+1. Install VS Code and the **nRF Connect for VS Code Extension Pack**.
+2. The extension will prompt you to install the **nRF Connect SDK v3.2.3** — do this once. It downloads the full Zephyr tree, toolchain (GCC ARM), and `west` tool automatically (~5–10 minutes, ~5 GB disk space).
+3. Open the cloned `ble_temp_node` folder in VS Code. The nRF Connect panel will detect the `CMakeLists.txt` and `prj.conf` and recognise it as an NCS application automatically.
+
+No `west init`, no `west update`, no manual PATH configuration needed.
+
+---
+
 ## SDK & Toolchain
 
 | Component         | Version               |
@@ -34,7 +53,7 @@ A BLE peripheral firmware built with **nRF Connect SDK (Zephyr RTOS)** that peri
 
 ---
 
-##  Project Structure
+## Project Structure
 
 ```
 ble_temp_node/
@@ -47,44 +66,10 @@ ble_temp_node/
 │   ├── ble_service.h
 │   ├── temp_sensor.h
 │   └── app_timer.h
-├── CMakeLists.txt
-├── prj.conf
+├── CMakeLists.txt        # Tells west what to compile
+├── prj.conf              # Kconfig: enables BLE, sensor, WDT, logging
 └── README.md
 ```
-
----
-
-## Getting the Code
-
-### Clone the Repository
-
-```bash
-git clone https://github.com//ble_temp_node.git
-cd ble_temp_node
-```
-
-> Replace `<your-username>` with your actual GitHub username.
-
-### What You Get
-
-The repository is a self-contained NCS application — no separate SDK repository to clone. The only external dependency is the nRF Connect SDK itself, which you install once via the VS Code extension (see [How to Build & Flash](#how-to-build--flash) below).
-
-```
-ble_temp_node/          ← clone this repo
-├── src/                ← all application C source files
-├── inc/                ← all application headers
-├── CMakeLists.txt      ← tells Zephyr's west build system what to compile
-├── prj.conf            ← Kconfig options: enables BLE, sensor, WDT, logging
-└── README.md
-```
-
-### First-Time Setup (one-time only)
-
-1. Install VS Code and the **nRF Connect for VS Code Extension Pack** (see prerequisites in the next section).
-2. The extension will ask you to install the **nRF Connect SDK v3.2.3** — do this once. It downloads the full Zephyr tree, toolchain (GCC ARM), and `west` tool automatically. This takes ~5–10 minutes and uses ~5 GB of disk space.
-3. After the SDK is installed, open the cloned `ble_temp_node` folder in VS Code. The nRF Connect panel will detect the `CMakeLists.txt` and `prj.conf` and recognise it as an NCS application automatically.
-
-You are now ready to build and flash — no `west init`, no `west update`, no manual PATH configuration required.
 
 ---
 
@@ -92,55 +77,50 @@ You are now ready to build and flash — no `west init`, no `west update`, no ma
 
 ### Prerequisites
 
-The recommended setup uses the **nRF Connect extension pack for VS Code** — it manages the SDK, toolchain, and board targets from inside the editor with no manual PATH configuration.
-
 1. Install [Visual Studio Code](https://code.visualstudio.com/)
 2. Open VS Code → Extensions (`Ctrl+Shift+X`) → search **"nRF Connect for VS Code Extension Pack"** → Install
-3. The extension pack will prompt you to install the **nRF Connect SDK**. Click **Install SDK**, select version **v3.2.3**, and let it download the toolchain automatically.
-4. Once installed, open the **nRF Connect** sidebar panel (Nordic icon on the left) — your SDK and toolchain paths will be shown and ready.
+3. Click **Install SDK**, select **v3.2.3**, and let it download automatically.
+4. Open the **nRF Connect** sidebar panel (Nordic icon) — SDK and toolchain paths will be shown and ready.
 
 ### Build & Flash
 
-All building and flashing is done through the **nRF Connect for VS Code** extension — no terminal commands needed.
-
 1. Open the project folder in VS Code (`File → Open Folder`)
-2. In the **nRF Connect** sidebar panel, click **+ Add Build Configuration**
-3. Select board: `nrf52840dk/nrf52840` → click **Build Configuration**
-4. Once the build completes, click **Flash** in the same panel — it will program the DK over the J-Link USB connection automatically
+2. In the nRF Connect panel → **+ Add Build Configuration**
+3. Select board: `nrf52840dk/nrf52840` → **Build Configuration**
+4. Once built, click **Flash** — programs the DK over J-Link USB automatically.
 
 ### Monitor Serial Logs
 
-In VS Code, open the **Serial Terminal** panel (bottom bar) and connect at **115200 baud** to the DK's COM port. Alternatively, use the **RTT Viewer** from the nRF Connect panel for zero-latency log output over the debug probe.
+Open the **Serial Terminal** panel in VS Code, connect at **115200 baud**. Alternatively, use the **RTT Viewer** from the nRF Connect panel for zero-latency log output.
 
 ---
 
 ## How to Test with nRF Connect App
 
 1. Install **nRF Connect for Mobile** (iOS or Android).
-2. Power on the DK. **LED2 is OFF** (not connected).
-3. Open nRF Connect → **Scanner** tab → look for a device named `ENV_NODE_XXYY` where `XXYY` are the last 2 bytes of the BLE address.
-4. Tap **Connect**.  **LED2 turns ON** confirming connection.
-5. Navigate to the **ENV_NODE custom service** (UUID starts with `9e844024-...`).
+2. Power on the DK — **LED2 is OFF** (not connected).
+3. Open nRF Connect → **Scanner** tab → find `ENV_NODE_XXYY` (last 2 bytes of BLE address).
+4. Tap **Connect** — **LED2 turns ON**.
+5. Navigate to the **ENV_NODE custom service** (UUID `9e844024-...`).
 
 ### Read Temperature
-- Tap the **Temperature characteristic** (UUID `9e844025-...`) → **Read**.
-- Value is a signed `int32_t` in units of `°C × 100` (little-endian).
-- Example: `0xBC 0x09 0x00 0x00` = `0x000009BC` = 2492 = **24.92 °C**
+- Tap **Temperature characteristic** (UUID `9e844025-...`) → **Read**.
+- Value is a signed `int32_t`, little-endian, units of `°C × 100`.
+- Example: `0xBC 0x09 0x00 0x00` = 2492 = **24.92 °C**
 
 ### Enable Notifications
 - Tap the **↓** (notify) button on the Temperature characteristic.
 - Notifications arrive at the current sampling interval (default: **1000 ms**).
 
 ### Change Sampling Interval
-- Tap the **Interval characteristic** (UUID `9e844026-...`) → **Write**.
-- Write a 4-byte little-endian `uint32_t` value in milliseconds.
-- Valid range: **200 ms – 10,000 ms**. Values outside this range are rejected with ATT error `Value Not Allowed`.
-- Example — set to 2 seconds: write `0xD0 0x07 0x00 0x00` (2000 = `0x000007D0`).
+- Tap **Interval characteristic** (UUID `9e844026-...`) → **Write**.
+- Write a 4-byte little-endian `uint32_t` in milliseconds. Valid range: **200–10,000 ms**.
+- Example — set to 2 seconds: `0xD0 0x07 0x00 0x00` (= 2000).
 - Out-of-range values are rejected with ATT error `0x13` (Value Not Allowed).
 - The board log confirms: `Application timer interval set to XXXX ms`.
 
 ### Disconnect
-- Tap **Disconnect**. LED2 turns OFF. The device automatically restarts advertising.
+- Tap **Disconnect** — LED2 turns OFF. Device automatically restarts advertising.
 
 ---
 
@@ -148,66 +128,53 @@ In VS Code, open the **Serial Terminal** panel (bottom bar) and connect at **115
 
 ### Threads
 
-Zephyr is a preemptive multi-threaded RTOS. In Zephyr, **lower numeric priority = higher urgency**. Priorities split into two domains:
-- **Preemptive threads (priority ≥ 0):** can be interrupted by any higher-priority thread at any time.
-- **Cooperative threads (priority < 0):** once running, yield voluntarily — they are never preempted mid-execution.
+Zephyr is a preemptive multi-threaded RTOS. **Lower numeric priority = higher urgency.** Priorities split into two domains:
+- **Preemptive (priority ≥ 0):** can be interrupted by any higher-priority thread at any time.
+- **Cooperative (priority < 0):** once running, yields voluntarily — never preempted mid-execution.
 
 | Thread | Created by | Priority | Type | Role |
 |---|---|---|---|---|
-| **main** | Zephyr kernel (from `main()`) | 0 | Preemptive | Init sequence, sensor read loop, WDT feed. Blocks on semaphore between ticks — CPU sleeps. |
-| **BT RX/TX** | Zephyr BLE stack internally | varies (typically -7 to -4) | Cooperative | Drives all BLE radio events: connections, disconnections, GATT reads/writes, notifications. Calls `on_connected`, `on_disconnected`, `ReadTemperature`, `WriteInterval`. |
-| **System work queue** | Zephyr kernel | -1 | Cooperative | Executes deferred work items submitted via `k_work_submit()`. Runs `adv_work_handler` to restart advertising after disconnect. |
+| **main** | Zephyr kernel | 0 | Preemptive | Init sequence, sensor read loop, WDT feed. Blocks on semaphore between ticks — CPU sleeps. |
+| **BT RX/TX** | Zephyr BLE stack | ~-7 (see below) | Cooperative | Drives all BLE radio events: connections, disconnections, GATT reads/writes, notifications. |
+| **System work queue** | Zephyr kernel | -1 | Cooperative | Executes deferred `k_work` items. Used here to restart advertising safely after disconnect. |
 
-#### What does "varies" mean for the BT thread?
+#### About the BT thread priority
 
-The Zephyr BLE stack creates **multiple internal threads** rather than one fixed thread. The exact number and their priorities are controlled by Kconfig symbols inside the BLE stack itself — you do not set them manually. Typical values (NCS v3.x):
+The BLE stack creates several internal threads (e.g. `bt_rx` for HCI processing). Their priorities are set by Kconfig symbols inside the stack — you don't set them manually. The default is typically `-7`, controlled by `CONFIG_BT_RX_PRIO`. You can override this in `prj.conf` but it's rarely needed.
 
-| Internal BT thread | Kconfig symbol | Default priority |
-|---|---|---|
-| `bt_rx` (HCI event/ACL processing) | `CONFIG_BT_RX_PRIO` | -7 |
-| `bt_hci_ecc` (ECC crypto, if enabled) | `CONFIG_BT_HCI_ECC_STACK_SIZE` | -7 |
-| Controller (if software controller used) | `CONFIG_BT_CTLR_WORKER_PRIO` | -7 |
+**Why cooperative (negative priority)?** BLE has hard real-time timing constraints — connection events must be handled on a tight schedule. Cooperative threads run to completion without being preempted by lower-priority threads like `main` (priority 0), which is exactly what the BT stack needs.
 
-**Who chooses these priorities?** Nordic and the Zephyr BLE maintainers set the defaults. You can override them in `prj.conf` (e.g. `CONFIG_BT_RX_PRIO=-8`) but this is rarely needed and risks starving other cooperative threads. The defaults are tuned to ensure BLE timing constraints are met while not starving the rest of the system.
-
-**Why are BT threads cooperative (negative priority)?** BLE has hard real-time timing requirements — connection events must be handled within microseconds of their scheduled slot. Cooperative threads guarantee that once the BT stack starts handling a radio event, no lower-priority thread (like `main`, priority 0) can preempt it mid-operation. The BT stack yields control itself when it is done, which is the correct and safe pattern.
-
-**How does this affect your application?** The `main` thread at priority 0 is preemptive and will be interrupted by the BT threads whenever a BLE event arrives. This is why `is_connected`, `is_notifications_enabled`, and `current_temperature` are `atomic_t` — the BT thread can write them at any point while `main` is reading them.
-
-> **Why the work queue for advertising?**  
-> `bt_le_adv_start()` cannot be called directly from a BT callback — it would deadlock the BT stack. Submitting it as a `k_work` item defers it to the system work queue thread, which runs outside the BT context.
-
-> **Why `atomic_t` for shared flags?**  
-> `is_connected`, `is_notifications_enabled`, and `current_temperature` are written by the BT thread and read by the main thread. `atomic_t` guarantees safe concurrent access without a mutex.
+**Impact on the application:** the BT thread can interrupt `main` at any time. This is why `is_connected`, `is_notifications_enabled`, and `current_temperature` are `atomic_t` — the BT thread can write them while `main` is reading them.
 
 ---
+
 ### The System Work Queue
 
-The **system work queue** is a Zephyr kernel primitive: a cooperative thread (priority -1) that processes a FIFO queue of `k_work` items. When you call `k_work_submit(&my_work)`, you place a work item onto this queue. The work queue thread picks it up and executes your handler function (`adv_work_handler` in this project) from its own thread context — not from the context where `k_work_submit` was called.
+The system work queue is a Zephyr cooperative thread (priority -1) that processes a FIFO of `k_work` items. When you call `k_work_submit(&my_work)`, the item is queued and the handler runs later from the work queue's own thread context.
 
-#### Why is this necessary for advertising restart?
+**Why is this needed for advertising restart?**
 
-When `recycled_cb()` fires (signalling the connection object is freed), it is called **from within the BT stack thread context**. At that moment, the BT stack is still executing. Calling `bt_le_adv_start()` directly from inside a BT callback creates a re-entrancy problem: the BT stack would be calling back into itself, risking a deadlock or corrupted internal state.
+`recycled_cb()` fires when the BT stack has fully freed the connection object — this is the correct and safe point to restart advertising (`on_disconnected` fires earlier, while cleanup is still in progress, and calling `bt_le_adv_start()` there can corrupt BT stack state).
 
-The fix is simple: instead of calling `bt_le_adv_start()` directly, submit it as a work item:
+But even inside `recycled_cb`, calling `bt_le_adv_start()` directly is unsafe — it's still running inside a BT callback, meaning the BT stack is on the call stack. Calling back into the BT API from there risks re-entrancy and deadlock.
+
+The solution:
 
 ```
-recycled_cb()                   ← runs inside BT thread
-    └─ k_work_submit(&adv_work) ← just adds item to queue, returns immediately
-                                   BT thread continues and exits cleanly
+recycled_cb()                    ← runs inside BT thread
+    └─ k_work_submit(&adv_work)  ← just queues an item, returns immediately
 
-System work queue thread        ← runs separately, outside BT context
+System work queue thread         ← runs outside BT context
     └─ adv_work_handler()
-           └─ bt_le_adv_start() ← safe to call here
+           └─ bt_le_adv_start()  ← safe here
 ```
 
-This pattern — **defer BT API calls to outside the BT callback context** — is the standard Zephyr BLE pattern for any operation that must happen after a connection event but cannot run inside the callback itself.
+> Using the system work queue instead of a dedicated thread avoids allocating a new stack (512–2048 bytes) for a function that runs once per reconnect. The work queue already exists and is idle between events.
 
-> **Why the system work queue and not a new thread?** Creating a dedicated thread for a single function that runs once per reconnect would waste RAM (each Zephyr thread needs its own stack, typically 512–2048 bytes). The system work queue thread already exists and is idle between events — reusing it costs nothing.
 
-### Static Module Diagram
+---
 
-This diagram shows each module, its public interface, and the dependency relationships between modules. Arrows mean "depends on / calls into".
+### Runtime Data Flow
 
 ```
  ┌──────────────────────────────────────────────────────────────────────┐
@@ -288,40 +255,36 @@ This diagram shows each module, its public interface, and the dependency relatio
 │  APPLICATION THREADS                                               │
 │                                                                    │
 │  ┌──────────────────────────────────────────────────────────────┐  │
-│  │  main thread                                                 │  │
+│  │  main thread  (priority 0)                                   │  │
 │  │                                                              │  │
 │  │  [boot]                                                      │  │
 │  │   WDT setup ──► TempSensorInit ──► TimerInit ──► BLEInit     │  │
 │  │                                                              │  │
-│  │  [loop — CPU sleeps here until semaphore fires]              │  │
-│  │   k_sem_take(K_FOREVER)                                      │  │
-│  │         │                                                    │  │
-│  │         ▼                                                    │  │
-│  │   TempSensorRead()  ──► ApplyMovingAverage() ──► min/max     │  │
-│  │         │                                                    │  │
-│  │         ▼                                                    │  │
-│  │   BLENotify(temp)   ──► bt_gatt_notify() ──► BT stack        │  │
-│  │         │                                                    │  │
-│  │         ▼                                                    │  │
-│  │   wdt_feed()                                                 │  │
+│  │  [loop]  k_sem_take(K_FOREVER)  ← CPU sleeps here            │  │
+│  │               │                                              │  │
+│  │               ▼                                              │  │
+│  │       TempSensorRead()  ──► ApplyMovingAverage() ──► min/max │  │
+│  │               │                                              │  │
+│  │               ▼                                              │  │
+│  │       BLENotify(temp)   ──► bt_gatt_notify() ──► BT stack    │  │
+│  │               │                                              │  │
+│  │               ▼                                              │  │
+│  │           wdt_feed()                                         │  │
 │  └──────────────────────────────────────────────────────────────┘  │
 │                                                                    │
 │  ┌──────────────────────────────────────────────────────────────┐  │
-│  │  BT stack thread  (managed by Zephyr BLE stack)              │  │
+│  │  BT stack thread  (~priority -7)                             │  │
 │  │                                                              │  │
-│  │   on_connected()    ──► atomic_set(is_connected)             │  │
-│  │                     ──► bt_conn_le_param_update()            │  │
-│  │   on_disconnected() ──► atomic_set(is_connected = 0)         │  │
-│  │   recycled_cb()     ──► k_work_submit(adv_work)              │  │
-│  │                         (connection object freed; safe to    │  │
-│  │                          restart advertising only now)       │  │
-│  │   WriteInterval()   ──► TimerSetInterval()                   │  │
-│  │   ReadTemperature() ──► atomic_get(current_temperature)      │  │
+│  │  on_connected()    ──► atomic_set(is_connected)              │  │
+│  │                    ──► bt_conn_le_param_update()             │  │
+│  │  on_disconnected() ──► atomic_set(is_connected = 0)          │  │
+│  │  recycled_cb()     ──► k_work_submit(adv_work)               │  │
+│  │  WriteInterval()   ──► TimerSetInterval()                    │  │
+│  │  ReadTemperature() ──► atomic_get(current_temperature)       │  │
 │  └──────────────────────────────────────────────────────────────┘  │
 │                                                                    │
 │  ┌──────────────────────────────────────────────────────────────┐  │
-│  │  System work queue thread                                    │  │
-│  │                                                              │  │
+│  │   System work queue thread (priority -1)                     │  │
 │  │   adv_work_handler() ──► bt_le_adv_start()                   │  │
 │  └──────────────────────────────────────────────────────────────┘  │
 └────────────────────────────────────────────────────────────────────┘
@@ -329,12 +292,12 @@ This diagram shows each module, its public interface, and the dependency relatio
 
 ### Module Responsibilities
 
-| Module           | Responsibility                                                              |
-|------------------|-----------------------------------------------------------------------------|
-| `main.c`         | Orchestration: init sequence, main loop, WDT feed                           |
-| `ble_service.c`  | BLE stack init, dynamic device name, GATT service definition, advertising   |
-| `temp_sensor.c`  | Sensor read, 10-sample moving average filter, min/max tracking              |
-| `app_timer.c`    | Periodic `k_timer` → signals `k_sem` to unblock the main loop               |
+| Module | Responsibility |
+|---|---|
+| `main.c` | Orchestration: init sequence, main loop, WDT feed |
+| `ble_service.c` | BLE stack init, dynamic device name, GATT service, advertising |
+| `temp_sensor.c` | Sensor read, 10-sample moving average, min/max tracking |
+| `app_timer.c` | Periodic `k_timer` → signals `k_sem` to unblock the main loop |
 
 ---
 
@@ -352,76 +315,68 @@ This diagram shows each module, its public interface, and the dependency relatio
 
 ### Device Name
 
-Format: `ENV_NODE_XXYY`  
-`XX` and `YY` are bytes 1 and 0 of the public BLE address (last 2 bytes), printed as hex. This gives each device a unique, stable, human-readable suffix derived from hardware — no manual provisioning needed.
+Format: `ENV_NODE_XXYY` — `XX` and `YY` are the last 2 bytes of the public BLE address in hex. Gives each device a unique, stable suffix derived from hardware with no manual provisioning needed.
 
 ---
 
 ## Low-Power Strategy
 
-The firmware is fully **event-driven** — there are no busy-wait loops or `k_sleep(K_MSEC(x))` spin delays anywhere in the application.
+The firmware is fully **event-driven** — no busy-wait loops or `k_sleep()` spin delays anywhere.
 
 ### What Sleeps
 
-When the main thread calls `k_sem_take(K_FOREVER)`, Zephyr's scheduler finds no other runnable thread and puts the CPU into **sleep mode** (ARM WFE/WFI). The nRF52840 enters its low-power idle state automatically.
+When the main thread calls `k_sem_take(K_FOREVER)`, Zephyr's scheduler finds no other runnable thread and puts the CPU into sleep (ARM WFI). The nRF52840 enters its low-power idle state automatically between every sample.
 
 ### What Wakes the CPU
 
-| Wake Source        | Mechanism                                        |
-|--------------------|--------------------------------------------------|
-| Sampling timer     | `k_timer` backed by the nRF52840 RTC1 peripheral. Fires an interrupt → `k_sem_give` → main thread unblocks |
-| BLE events         | Zephyr BLE stack uses the RTC0 peripheral and radio interrupt. Connection, disconnection, and Client Characteristic Configuration writes are all interrupt-driven |
-| Watchdog           | WDT interrupt (if callback set) or direct SoC reset |
+| Wake Source | Mechanism |
+|---|---|
+| Sampling timer | `k_timer` backed by RTC1. Fires interrupt → `k_sem_give` → main thread unblocks |
+| BLE events | BLE stack uses RTC0 + radio interrupt. All connection and GATT events are interrupt-driven |
+| Watchdog | WDT timeout triggers SoC reset |
 
 ### How to Measure Current Consumption
 
-#### Option 1 — Nordic PPK2
-The **Power Profiler Kit II** is the purpose-built tool for this job. Connect it in **ampere meter mode** between the DK's `VDDMAIN` supply and the board's power input. Use the **nRF Connect Power Profiler** desktop app to record a live current trace. You get µA resolution, timestamps, and a visual breakdown of advertising bursts, connection events, and sleep periods. This is the gold-standard approach for nRF52840 power analysis.
+**Option 1 — Nordic PPK2 (recommended)**  
+Connect the Power Profiler Kit II in ampere-meter mode between the DK's `VDDMAIN` and the board supply. Use the nRF Connect Power Profiler desktop app to record a live trace with µA resolution and timestamps.
 
-#### Option 4 — Nordic Online Power Profiler (no hardware needed, estimation only)
-Use [devzone.nordicsemi.com/power](https://devzone.nordicsemi.com/power) for a software estimate without any hardware. Configure it to match this firmware:
+**Option 2 — Nordic Online Power Profiler (no hardware needed)**  
+Use [devzone.nordicsemi.com/power](https://devzone.nordicsemi.com/power) for a model-based estimate. Configure it as:
 
 | Setting | Value |
 |---|---|
-| Protocol | Bluetooth LE |
-| Role | Peripheral |
-| Advertising interval | 100 ms (`BT_LE_ADV_CONN_FAST_1` preset) |
-| Connection interval | 100–500 ms (peripheral preference set in `ble_service.c`) |
+| Protocol | Bluetooth LE, Peripheral |
+| Advertising interval | 100 ms (`BT_LE_ADV_CONN_FAST_1`) |
+| Connection interval | 100–500 ms |
 | TX power | 0 dBm |
-| Notification interval | matches your sampling interval (default 1000 ms) |
+| Notification interval | 1000 ms (default) |
 | CPU sleep between events | enabled |
 
-This gives a model-based estimate, not a real measurement. Use it to validate your design direction before bringing up hardware.
+This is an estimate, not a real measurement — but good enough to validate design direction.
 
 ---
 
 ### Current Consumption Estimates
 
-All figures are for nRF52840 at 3.0 V, DC/DC converter disabled (LDO mode, which is the nRF52840 DK default). Enabling DC/DC (`CONFIG_DCDC_NATIVE_BAAA=y`) typically reduces active-state current by ~30%.
+Figures for nRF52840 at 3.0 V, LDO mode (DK default). DC/DC (`CONFIG_DCDC_NATIVE_BAAA=y`) reduces active current ~30%.
 
-| State | What is happening | Duration per cycle | Estimated current | Avg contribution |
+| State | What is happening | Duration / cycle | Current | Avg contribution |
 |---|---|---|---|---|
-| **Deep sleep** | CPU in WFI, radio off, RTC running | ~990 ms / 1000 ms cycle | ~3–5 µA | ~3–5 µA |
-| **Sensor read** | CPU wakes, fetches temp via Zephyr driver | ~0.5 ms / cycle | ~1–3 mA peak | ~0.5–1.5 µA |
-| **BLE TX burst** | Radio transmits notification packet at 0 dBm | ~1–2 ms / cycle | ~8–10 mA peak | ~8–20 µA |
-| **BLE connection event (idle)** | Radio polls at connection interval, no data | ~1 ms per conn interval (100–500 ms) | ~5–8 mA peak | ~10–80 µA |
-| **Advertising** (no connection) | 3 ADV PDUs every 100 ms | ~1.5 ms / 100 ms | ~8–10 mA peak | ~120–150 µA |
+| **Deep sleep** | CPU in WFI, radio off, RTC running | ~990 ms / 1000 ms | ~4 µA | ~3.9 µA |
+| **Sensor read** | CPU wakes, fetches temp via Zephyr driver | ~0.5 ms | ~2 mA peak | ~1.0 µA |
+| **BLE TX burst** | Radio transmits notification at 0 dBm | ~1.5 ms | ~9 mA peak | ~13.5 µA |
+| **BLE conn event (idle)** | Radio polls at connection interval, no data | ~1 ms per 200 ms | ~6 mA peak | ~30 µA |
+| **Advertising** (unconnected) | 3 ADV PDUs every 100 ms | ~1.5 ms / 100 ms | ~9 mA peak | ~135 µA |
 
-> **How to read "Avg contribution":** multiply the peak current by the fraction of time in that state.
-> Example for BLE TX burst at 1 s interval: 9 mA × (1.5 ms / 1000 ms) ≈ **13.5 µA average contribution**.
+### How to Calculate Average Current
 
-### How to Calculate Average Current Consumption
-
-Average current is calculated using the **duty-cycle method**: for each state, multiply its current by the fraction of time spent in it, then sum all contributions.
+Use the duty-cycle method — for each state, multiply its current by the fraction of time in that state, then sum:
 
 ```
 I_avg = Σ ( I_state × T_state ) / T_total
 ```
 
-#### Example: Connected, notifying at 1 s interval, 100–500 ms connection interval
-
-Assume: 1000 ms cycle, connection interval = 200 ms (5 conn events per cycle),
-sensor read = 0.5 ms, BLE TX = 1.5 ms, sleep fills the rest.
+**Example: connected + notifying at 1 s interval, 200 ms connection interval**.
 
 | State | Current | Duration | Contribution |
 |---|---|---|---|
