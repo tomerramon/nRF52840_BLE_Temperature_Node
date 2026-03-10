@@ -16,9 +16,9 @@ A BLE peripheral firmware built with **nRF Connect SDK (Zephyr RTOS)** that peri
 - [Architecture Overview](#architecture-overview)
 - [BLE GATT Service](#ble-gatt-service)
 - [Low-Power Strategy](#low-power-strategy)
+- [Design Decisions & Trade-offs](#design-decisions--trade-offs)
 - [Watchdog Strategy](#watchdog-strategy)
 - [Bonus Features](#bonus-features)
-- [Current Consumption Estimate](#current-consumption-estimate)
 
 ---
 
@@ -101,8 +101,6 @@ In VS Code, open the **Serial Terminal** panel (bottom bar) and connect at **115
 - Write a 4-byte little-endian `uint32_t` value in milliseconds.
 - Valid range: **200 ms – 10,000 ms**. Values outside this range are rejected with ATT error `Value Not Allowed`.
 - Example — set to 2 seconds: write `0xD0 0x07 0x00 0x00` (2000 = `0x000007D0`).
-- Out-of-range values are rejected with ATT error `0x13` (Value Not Allowed).
-- The board log confirms: `Application timer interval set to XXXX ms`.
 
 ### Disconnect
 - Tap **Disconnect**. LED2 turns OFF. The device automatically restarts advertising.
@@ -132,59 +130,59 @@ Zephyr is a multi-threaded RTOS. This firmware uses three threads — two create
 ### UML — Component & Data Flow
 
 ```
-┌────────────────────────────────────────────────────────────────────┐
-│  HARDWARE / PERIPHERALS                                            │
-│                                                                    │
+┌─────────────────────────────────────────────────────────────────────┐
+│  HARDWARE / PERIPHERALS                                             │
+│                                                                     │
 │   ┌──────────┐    RTC1 interrupt     ┌────────────────────────┐    │
 │   │  RTC1    │──────────────────────►│  k_timer (app_timer.c) │    │
 │   └──────────┘                       └──────────┬─────────────┘    │
-│                                                 │ k_sem_give       │
+│                                                  │ k_sem_give       │
 │   ┌──────────┐    radio interrupt               │                  │
 │   │  RADIO   │──────────────────────►  BT stack thread             │
 │   └──────────┘                                  │                  │
 └─────────────────────────────────────────────────│──────────────────┘
                                                   │
 ┌─────────────────────────────────────────────────▼──────────────────┐
-│  APPLICATION THREADS                                               │
-│                                                                    │
+│  APPLICATION THREADS                                                │
+│                                                                     │
 │  ┌──────────────────────────────────────────────────────────────┐  │
 │  │  main thread                                                 │  │
 │  │                                                              │  │
 │  │  [boot]                                                      │  │
-│  │   WDT setup ──► TempSensorInit ──► TimerInit ──► BLEInit     │  │
+│  │   WDT setup ──► TempSensorInit ──► TimerInit ──► BLEInit    │  │
 │  │                                                              │  │
 │  │  [loop — CPU sleeps here until semaphore fires]              │  │
 │  │   k_sem_take(K_FOREVER)                                      │  │
 │  │         │                                                    │  │
 │  │         ▼                                                    │  │
-│  │   TempSensorRead()  ──► ApplyMovingAverage() ──► min/max     │  │
+│  │   TempSensorRead()  ──► ApplyMovingAverage() ──► min/max    │  │
 │  │         │                                                    │  │
 │  │         ▼                                                    │  │
-│  │   BLENotify(temp)   ──► bt_gatt_notify() ──► BT stack        │  │
+│  │   BLENotify(temp)   ──► bt_gatt_notify() ──► BT stack       │  │
 │  │         │                                                    │  │
 │  │         ▼                                                    │  │
 │  │   wdt_feed()                                                 │  │
 │  └──────────────────────────────────────────────────────────────┘  │
-│                                                                    │
+│                                                                     │
 │  ┌──────────────────────────────────────────────────────────────┐  │
 │  │  BT stack thread  (managed by Zephyr BLE stack)              │  │
 │  │                                                              │  │
 │  │   on_connected()    ──► atomic_set(is_connected)             │  │
-│  │                     ──► bt_conn_le_param_update()            │  │
+│  │                     ──► bt_conn_le_param_update()           │  │
 │  │   on_disconnected() ──► atomic_set(is_connected = 0)         │  │
-│  │   recycled_cb()     ──► k_work_submit(adv_work)              │  │
-│  │                         (connection object freed; safe to    │  │
+│  │   recycled_cb()     ──► k_work_submit(adv_work)             │  │
+│  │                         (connection object freed; safe to   │  │
 │  │                          restart advertising only now)       │  │
 │  │   WriteInterval()   ──► TimerSetInterval()                   │  │
 │  │   ReadTemperature() ──► atomic_get(current_temperature)      │  │
 │  └──────────────────────────────────────────────────────────────┘  │
-│                                                                    │
+│                                                                     │
 │  ┌──────────────────────────────────────────────────────────────┐  │
 │  │  System work queue thread                                    │  │
 │  │                                                              │  │
 │  │   adv_work_handler() ──► bt_le_adv_start()                   │  │
 │  └──────────────────────────────────────────────────────────────┘  │
-└────────────────────────────────────────────────────────────────────┘
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Module Responsibilities
@@ -233,35 +231,149 @@ When the main thread calls `k_sem_take(K_FOREVER)`, Zephyr's scheduler finds no 
 | BLE events         | Zephyr BLE stack uses the RTC0 peripheral and radio interrupt. Connection, disconnection, and CCC writes are all interrupt-driven |
 | Watchdog           | WDT interrupt (if callback set) or direct SoC reset |
 
-### How to Estimate Current (No Hardware Required)
+### How to Measure Current Consumption
 
-Use the **Nordic online Power Profiler** at [devzone.nordicsemi.com/power](https://devzone.nordicsemi.com/power) — no hardware, no account, runs in the browser.
+#### Option 1 — Nordic PPK2 (recommended, ~$100)
+The **Power Profiler Kit II** is the purpose-built tool for this job. Connect it in **ampere meter mode** between the DK's `VDDMAIN` supply and the board's power input. Use the **nRF Connect Power Profiler** desktop app to record a live current trace. You get µA resolution, timestamps, and a visual breakdown of advertising bursts, connection events, and sleep periods. This is the gold-standard approach for nRF52840 power analysis.
 
-Configure it as follows to match this firmware:
+#### Option 2 — Oscilloscope + shunt resistor (if you have a scope but no PPK2)
+Place a small shunt resistor (e.g. **10 Ω**) in series with the VDD supply line. Probe the voltage across it with your oscilloscope. Current = V_shunt / R_shunt. This gives you real waveform visibility into burst events (advertising, TX, sensor read). Limitations: scope probes add ~10 pF capacitance which can disturb short bursts; not suitable for sub-µA sleep current without a high-gain differential probe.
+
+#### Option 3 — Multimeter (limited, not recommended for dynamic loads)
+A standard multimeter in current mode can measure average current in a steady state (e.g. advertising-only with no connection). It cannot capture burst behavior — the internal sampling rate is too slow and the burden voltage of the current range can disturb the supply. Useful only for sanity-checking order-of-magnitude in a stable state, not for understanding peak vs. average split.
+
+#### Option 4 — Nordic Online Power Profiler (no hardware needed, estimation only)
+Use [devzone.nordicsemi.com/power](https://devzone.nordicsemi.com/power) for a software estimate without any hardware. Configure it to match this firmware:
 
 | Setting | Value |
 |---|---|
 | Protocol | Bluetooth LE |
 | Role | Peripheral |
-| Advertising interval | 100 ms (FAST_1 preset) |
+| Advertising interval | 100 ms (`BT_LE_ADV_CONN_FAST_1` preset) |
 | Connection interval | 100–500 ms (peripheral preference set in `ble_service.c`) |
 | TX power | 0 dBm |
-| Notification interval | matches your sampling interval |
+| Notification interval | matches your sampling interval (default 1000 ms) |
 | CPU sleep between events | enabled |
 
-The tool will output estimated average current in µA across advertising, connected, and idle states. This is a reasonable estimate for the nRF52840 at 3V — real measurements will vary based on PCB layout and regulator efficiency, but the order of magnitude will be correct.
-
-**Rough expected values for reference:**
-
-| State | Estimated current |
-|---|---|
-| CPU sleeping, radio off | ~3–5 µA |
-| Advertising (100 ms interval) | ~200–400 µA average |
-| Connected + notifying (1s interval) | ~50–100 µA average |
+This gives a model-based estimate, not a real measurement. Use it to validate your design direction before bringing up hardware.
 
 ---
 
-## Watchdog Strategy
+### Current Consumption Estimates
+
+All figures are for nRF52840 at 3.0 V, DC/DC converter disabled (LDO mode, which is the nRF52840 DK default). Enabling DC/DC (`CONFIG_DCDC_NATIVE_BAAA=y`) typically reduces active-state current by ~30%.
+
+| State | What is happening | Estimated avg current |
+|---|---|---|
+| **Deep sleep, no BLE** | CPU in WFI, all peripherals off, no advertising | ~3–5 µA |
+| **Advertising only** | CPU sleeping, radio wakes every 100 ms for 3 ADV PDUs | ~300–500 µA avg |
+| **Connected, idle** | CPU sleeping, radio polls at 100–500 ms connection interval, no notifications | ~20–60 µA avg |
+| **Connected + notifying** | CPU wakes at sample interval, reads sensor (~0.5 ms), sends BLE notification (~2–5 ms TX burst), sleeps | ~50–120 µA avg at 1 s interval |
+| **Peak TX burst** | Radio transmitting at 0 dBm | ~8–10 mA peak (lasts ~1–2 ms) |
+| **Sensor read active** | CPU active, sensor fetch via Zephyr driver | ~1–3 mA peak (lasts ~0.5 ms) |
+
+**Key observation:** the dominant power consumer at a 1-second sample interval is the BLE radio during advertising and connection events, not the CPU or sensor. Reducing the advertising interval or increasing the connection interval directly improves average current. At a 10-second sample interval, the device spends ~99.9% of the time sleeping — average current approaches the deep-sleep floor.
+
+> **Important:** these are engineering estimates derived from Nordic datasheets and the nRF52840 Product Specification (PS v1.7, Table 32–34). Real measurements on your specific board will differ based on PCB layout, regulator efficiency, crystal startup behaviour, and SDK sleep configuration. Always validate with a PPK2 or equivalent before making battery life claims.
+
+---
+
+## Design Decisions & Trade-offs
+
+Every non-trivial choice in this project has a reason. This section documents them explicitly.
+
+---
+
+### SDK Choice: nRF Connect SDK (Zephyr) vs. nRF5 SDK (SoftDevice)
+
+| | nRF Connect SDK (Zephyr) | nRF5 SDK (SoftDevice) |
+|---|---|---|
+| BLE stack | Zephyr built-in (open source) | Nordic SoftDevice (closed binary) |
+| Build system | `west` + CMake | Makefile + SEGGER Embedded Studio |
+| Driver model | Devicetree + Zephyr drivers | Register-level + nRF5 SDK HAL |
+| RTOS | Zephyr (fully integrated) | Bare-metal or FreeRTOS add-on |
+| Future support | Active, Nordic's strategic direction | Maintenance mode only |
+
+**Decision: nRF Connect SDK.**
+
+Reasons: NCS is Nordic's current and future platform. nRF5 SDK is in maintenance mode — new silicon (nRF54 series) is NCS-only. Zephyr's built-in BLE stack, device tree, and `west` build system are all actively developed and well documented. The SoftDevice approach requires managing a closed binary HEX blob alongside application code, which adds complexity with no benefit for a project of this scope.
+
+Trade-off accepted: NCS has a steeper initial learning curve and longer build times than nRF5 SDK. For a production project this is a one-time cost.
+
+---
+
+### Event-Driven Design: Semaphore vs. `k_sleep` vs. Busy-Wait
+
+**Decision: `k_sem_take(K_FOREVER)` in the main loop.**
+
+Three alternatives were considered:
+
+- **Busy-wait (`while (!time_expired) {}`)** — burns CPU cycles continuously, prevents any sleep. Completely unacceptable for a battery-conscious design.
+- **`k_sleep(K_MSEC(interval))`** — works, but couples the sleep duration to the main loop rather than the timer. If the sensor read or BLE notify takes variable time, drift accumulates. Also makes dynamic interval changes awkward (you'd need to abort and restart the sleep).
+- **`k_sem_take(K_FOREVER)` + `k_timer`** — the timer ISR is the single source of truth for timing. It fires at exactly the configured interval regardless of how long the main loop body takes. Dynamic interval changes (`TimerSetInterval`) take effect immediately on the next timer restart. The main thread is fully suspended between ticks, letting the CPU sleep.
+
+Trade-off: slightly more code (a separate `app_timer.c` module) in exchange for correct periodic timing and clean dynamic interval support.
+
+---
+
+### Error Handling Strategy
+
+**Decision: log the error, propagate the negative errno up to the caller, let `main()` decide.**
+
+The alternatives were:
+- **`__ASSERT` / `k_panic()`** — immediately fatal. Appropriate for truly unrecoverable conditions (e.g. corrupted kernel state), but too aggressive for peripheral init failures on a DK where you want to see the log before any reset.
+- **Silent ignore** — dangerous. A failed `bt_enable()` that isn't propagated means the device runs silently with no BLE. The root cause would never be found.
+- **Log + propagate** — each module logs the specific failure with context (`LOG_ERR`) and returns the raw errno. `main()` decides the recovery strategy: for critical failures (WDT, sensor, BLE), it returns from `main()`, which triggers a Zephyr kernel panic and visible log output. For non-critical failures (a single missed notify), it logs a warning and continues.
+
+The pattern used throughout: **negative return value = error, 0 = success**, consistent with Zephyr's own API convention.
+
+---
+
+### Temperature Representation: Fixed-Point `int32_t × 100` vs. `float`
+
+**Decision: `int32_t` in units of °C × 100 (e.g. 24.92 °C = 2492).**
+
+The nRF52840 Cortex-M4F has a hardware FPU, so `float` would work. But floating-point is avoided for three reasons:
+
+1. **BLE transmission** — `float` is 4 bytes with IEEE 754 encoding. Sending it over BLE requires the client to know the encoding. `int32_t` is simpler: the client just divides by 100. The BT SIG `IEEE_11073_SFLOAT` type exists for this, but adds complexity with no benefit here.
+2. **Comparison and filtering** — integer arithmetic in `ApplyMovingAverage()` and min/max tracking is exact. Float comparisons can have rounding surprises.
+3. **Precision** — the nRF52840 internal sensor has ±0.25 °C accuracy. Two decimal places of °C is more than sufficient; float's 7 significant digits would be meaningless precision.
+
+---
+
+### Moving Average Window: 10 Samples
+
+**Decision: 10-sample circular buffer.**
+
+The nRF52840 internal temperature sensor has inherent noise of ±0.25 °C (datasheet spec) and is also affected by self-heating from the SoC. A moving average reduces random noise without introducing a long lag on genuine temperature changes. 10 samples at the default 1-second interval means the filter has a 10-second memory — enough to smooth noise, short enough to track real environmental changes. A larger window (e.g. 30) would smooth more but lag more. A smaller window (e.g. 3) barely helps.
+
+Trade-off: the filter tracks **filtered** min/max, not raw min/max. This means the logged min/max values may not reflect the true hardware peak — they reflect the smoothed signal. This is a deliberate choice: reporting a filtered extreme is more useful than reporting a single noisy spike.
+
+---
+
+### Custom 128-bit UUIDs vs. BT SIG Standard UUIDs
+
+**Decision: custom 128-bit UUIDs.**
+
+The BT SIG defines standard UUIDs for `Temperature` (0x2A6E) and similar characteristics. Using them would make the service recognizable by generic BLE tools. However, the standard Temperature characteristic format uses `sint16` in units of 0.01 °C — different from this project's `int32_t × 100` format.
+
+Using a custom UUID is the honest choice: the format is non-standard, so advertising it under a standard UUID would be misleading. A custom UUID makes it explicit that a custom client or setup step is required. The UUIDs used (`9e844024–...`) are random 128-bit values with no collision risk.
+
+---
+
+### Re-advertising After Disconnect: `recycled_cb` vs. `on_disconnected`
+
+**Decision: start advertising from `recycled_cb`, not `on_disconnected`.**
+
+This is a subtle but important Zephyr BLE correctness point. When `on_disconnected` fires, the connection object is still alive — the BT stack has not finished cleaning up. Calling `bt_le_adv_start()` at that point can fail or corrupt BT stack state.
+
+`recycled_cb` fires only after the connection object has been fully freed and returned to the pool. It is the correct and safe point to restart advertising. This is explicitly documented in Zephyr's connection management API.
+
+Additionally, `bt_le_adv_start()` is submitted via `k_work` (deferred to the system work queue) rather than called directly from `recycled_cb`, because BT API calls from within BT callbacks can cause re-entrancy issues. The work queue runs in a separate thread context, outside the BT stack's own execution context.
+
+---
+
+
 
 The WDT is configured with a timeout of `MAX_INTERVAL_MS × 2` = **20,000 ms**.
 
