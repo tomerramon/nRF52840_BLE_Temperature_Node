@@ -3,7 +3,7 @@
 A BLE peripheral firmware built with **nRF Connect SDK (Zephyr RTOS)** that periodically reads the nRF52840 internal temperature sensor and exposes it over a custom GATT service. Designed for low power: the CPU sleeps between samples, waking only on timer expiry or BLE events.
 
 > **SDK Choice:** This project uses **nRF Connect SDK v3.2.3 (Zephyr RTOS)** — not the legacy nRF5 SDK (SoftDevice).  
-> All BLE APIs (`bt_enable`, `bt_gatt_notify`, `BT_GATT_SERVICE_DEFINE`) are from Zephyr's built-in BLE stack. The build system is Zephyr's `west` + CMake. There is no SoftDevice HEX, no `sd_ble_*` calls, and no nRF5 SDK Makefile structure anywhere in this project.
+> All BLE APIs (`bt_enable`, `bt_gatt_notify`, `BT_GATT_SERVICE_DEFINE`) are from Zephyr's built-in BLE stack.
 
 ---
 
@@ -228,21 +228,15 @@ When the main thread calls `k_sem_take(K_FOREVER)`, Zephyr's scheduler finds no 
 | Wake Source        | Mechanism                                        |
 |--------------------|--------------------------------------------------|
 | Sampling timer     | `k_timer` backed by the nRF52840 RTC1 peripheral. Fires an interrupt → `k_sem_give` → main thread unblocks |
-| BLE events         | Zephyr BLE stack uses the RTC0 peripheral and radio interrupt. Connection, disconnection, and CCC writes are all interrupt-driven |
+| BLE events         | Zephyr BLE stack uses the RTC0 peripheral and radio interrupt. Connection, disconnection, and Client Characteristic Configuration writes are all interrupt-driven |
 | Watchdog           | WDT interrupt (if callback set) or direct SoC reset |
 
 ### How to Measure Current Consumption
 
-#### Option 1 — Nordic PPK2 (recommended, ~$100)
+#### Option 1 — Nordic PPK2
 The **Power Profiler Kit II** is the purpose-built tool for this job. Connect it in **ampere meter mode** between the DK's `VDDMAIN` supply and the board's power input. Use the **nRF Connect Power Profiler** desktop app to record a live current trace. You get µA resolution, timestamps, and a visual breakdown of advertising bursts, connection events, and sleep periods. This is the gold-standard approach for nRF52840 power analysis.
 
-#### Option 2 — Oscilloscope + shunt resistor (if you have a scope but no PPK2)
-Place a small shunt resistor (e.g. **10 Ω**) in series with the VDD supply line. Probe the voltage across it with your oscilloscope. Current = V_shunt / R_shunt. This gives you real waveform visibility into burst events (advertising, TX, sensor read). Limitations: scope probes add ~10 pF capacitance which can disturb short bursts; not suitable for sub-µA sleep current without a high-gain differential probe.
-
-#### Option 3 — Multimeter (limited, not recommended for dynamic loads)
-A standard multimeter in current mode can measure average current in a steady state (e.g. advertising-only with no connection). It cannot capture burst behavior — the internal sampling rate is too slow and the burden voltage of the current range can disturb the supply. Useful only for sanity-checking order-of-magnitude in a stable state, not for understanding peak vs. average split.
-
-#### Option 4 — Nordic Online Power Profiler (no hardware needed, estimation only)
+#### Option 2 — Nordic Online Power Profiler (no hardware needed, estimation only)
 Use [devzone.nordicsemi.com/power](https://devzone.nordicsemi.com/power) for a software estimate without any hardware. Configure it to match this firmware:
 
 | Setting | Value |
@@ -272,9 +266,10 @@ All figures are for nRF52840 at 3.0 V, DC/DC converter disabled (LDO mode, which
 | **Peak TX burst** | Radio transmitting at 0 dBm | ~8–10 mA peak (lasts ~1–2 ms) |
 | **Sensor read active** | CPU active, sensor fetch via Zephyr driver | ~1–3 mA peak (lasts ~0.5 ms) |
 
-**Key observation:** the dominant power consumer at a 1-second sample interval is the BLE radio during advertising and connection events, not the CPU or sensor. Reducing the advertising interval or increasing the connection interval directly improves average current. At a 10-second sample interval, the device spends ~99.9% of the time sleeping — average current approaches the deep-sleep floor.
+**Key observation:** the dominant power consumer at a 1-second sample interval is the BLE radio during advertising and connection events, not the CPU or sensor. Reducing the advertising interval or increasing the connection interval directly improves average current. At a 10-second sample interval, the device spends ~99% of the time sleeping — average current approaches the deep-sleep floor.
 
-> **Important:** these are engineering estimates derived from Nordic datasheets and the nRF52840 Product Specification (PS v1.7, Table 32–34). Real measurements on your specific board will differ based on PCB layout, regulator efficiency, crystal startup behaviour, and SDK sleep configuration. Always validate with a PPK2 or equivalent before making battery life claims.
+> **Important:** these are engineering estimates derived from Nordic datasheets and the nRF52840 Product Specification (PS v1.7, Table 32–34). Not real measurements from my specific board, so there might be deferenses based on different hardware and software configurations.
+>  Always validate with a PPK2 or equivalent before making battery life claims.
 
 ---
 
@@ -292,11 +287,10 @@ Every non-trivial choice in this project has a reason. This section documents th
 | Build system | `west` + CMake | Makefile + SEGGER Embedded Studio |
 | Driver model | Devicetree + Zephyr drivers | Register-level + nRF5 SDK HAL |
 | RTOS | Zephyr (fully integrated) | Bare-metal or FreeRTOS add-on |
-| Future support | Active, Nordic's strategic direction | Maintenance mode only |
 
 **Decision: nRF Connect SDK.**
 
-Reasons: NCS is Nordic's current and future platform. nRF5 SDK is in maintenance mode — new silicon (nRF54 series) is NCS-only. Zephyr's built-in BLE stack, device tree, and `west` build system are all actively developed and well documented. The SoftDevice approach requires managing a closed binary HEX blob alongside application code, which adds complexity with no benefit for a project of this scope.
+Reasons: NCS is Nordic's current and future platform. nRF5 SDK is in maintenance mode. Zephyr's built-in BLE stack, device tree, and `west` build system are all actively developed and well documented.
 
 Trade-off accepted: NCS has a steeper initial learning curve and longer build times than nRF5 SDK. For a production project this is a one-time cost.
 
